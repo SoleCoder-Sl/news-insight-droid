@@ -2,3 +2,6 @@ project_id = "ieqwlrepkueoskxbgann"
 
 [functions.structure-article]
 verify_jwt = false
+
+[functions.fetch-trending-news]
+verify_jwt = false
