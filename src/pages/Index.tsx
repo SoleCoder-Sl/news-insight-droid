@@ -105,8 +105,8 @@ const Index = () => {
         ) : (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-foreground mb-2">Trending Now</h2>
-              <p className="text-muted-foreground">AI-powered live news from across India</p>
+              <h2 className="text-3xl font-bold text-foreground mb-2">Top 20 Trending News</h2>
+              <p className="text-muted-foreground">Live world news headlines in English</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -11,104 +11,58 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const SERPAPI_KEY = Deno.env.get("SERPAPI_KEY");
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!SERPAPI_KEY) {
+      throw new Error("SERPAPI_KEY is not configured");
     }
 
-    const systemPrompt = `You are a news aggregator. Search for and provide the top 12 trending news stories from India right now. 
+    // Fetch trending world news from SerpApi Google News
+    const url = new URL("https://serpapi.com/search.json");
+    url.searchParams.append("engine", "google_news");
+    url.searchParams.append("q", "trending news");
+    url.searchParams.append("gl", "in"); // India region
+    url.searchParams.append("hl", "en"); // English language
+    url.searchParams.append("api_key", SERPAPI_KEY);
 
-For each news story, provide:
-- title: A clear, engaging headline (max 100 chars)
-- description: A brief summary (2-3 sentences, max 200 chars)
-- content: Full article content (3-4 paragraphs with details)
-- source: The news source name (e.g., "The Times of India", "NDTV", "The Hindu")
-- category: One of [politics, business, technology, sports, entertainment, health, science]
-- publishedAt: Today's date in ISO format
-
-Return ONLY a valid JSON array with exactly 12 news articles. No additional text or markdown.
-
-Example format:
-[
-  {
-    "title": "Breaking: Major development in...",
-    "description": "Brief summary of the news...",
-    "content": "Full article content with multiple paragraphs...",
-    "source": "The Times of India",
-    "category": "politics",
-    "publishedAt": "2025-10-05T10:30:00Z"
-  }
-]`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: "Fetch the latest 12 trending news stories from India right now. Focus on diverse categories and recent events." }
-        ],
-      }),
-    });
+    console.log("Fetching news from SerpApi...");
+    const response = await fetch(url.toString());
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limits exceeded. Please try again later." }), 
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to continue." }), 
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error("AI gateway error");
+      console.error("SerpApi error:", response.status, errorText);
+      throw new Error(`SerpApi error: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log("SerpApi response received");
+    
     let newsArticles;
     
     try {
-      const content = data.choices?.[0]?.message?.content;
-      console.log("Raw AI response:", content);
+      // Extract news articles from SerpApi response
+      const newsResults = data.news_results || [];
       
-      // Try to extract JSON from the response
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        newsArticles = JSON.parse(jsonMatch[0]);
-      } else {
-        newsArticles = JSON.parse(content);
-      }
-      
-      // Validate and ensure we have the right structure
-      if (!Array.isArray(newsArticles)) {
-        throw new Error("Response is not an array");
-      }
-      
-      // Add missing fields and ensure consistency
-      newsArticles = newsArticles.map((article: any, index: number) => ({
-        title: article.title || `Breaking News ${index + 1}`,
-        description: article.description || "Stay informed with the latest updates.",
-        content: article.content || article.description || "Full details coming soon.",
-        source: { name: article.source || "India News" },
-        author: article.author || null,
-        url: article.url || "#",
-        urlToImage: article.urlToImage || `https://images.unsplash.com/photo-${1504711434969 + index}?w=800&q=80`,
-        publishedAt: article.publishedAt || new Date().toISOString(),
-        category: article.category || "general"
+      // Get top 20 news articles
+      newsArticles = newsResults.slice(0, 20).map((article: any) => ({
+        title: article.title || "Breaking News",
+        description: article.snippet || article.title || "Stay informed with the latest updates.",
+        content: article.snippet || article.title || "Click to read the full article.",
+        source: { name: article.source?.name || "News Source" },
+        author: null,
+        url: article.link || "#",
+        urlToImage: article.thumbnail || `https://images.unsplash.com/photo-1504711434969?w=800&q=80`,
+        publishedAt: article.date || new Date().toISOString(),
+        category: "general"
       }));
       
+      // If we got less than 20 articles, log it
+      if (newsArticles.length < 20) {
+        console.log(`Only ${newsArticles.length} articles received from SerpApi`);
+      }
+      
     } catch (parseError) {
-      console.error("Error parsing AI response:", parseError);
+      console.error("Error parsing SerpApi response:", parseError);
       // Fallback to default news if parsing fails
       newsArticles = generateFallbackNews();
     }
@@ -133,10 +87,10 @@ function generateFallbackNews() {
   const now = new Date().toISOString();
   return [
     {
-      title: "India's Technology Sector Shows Strong Growth in 2025",
-      description: "The Indian tech industry continues to demonstrate robust expansion with significant investments in AI and digital infrastructure.",
-      content: "India's technology sector has shown remarkable resilience and growth in the first quarter of 2025. Major tech companies are expanding operations and investing heavily in artificial intelligence and machine learning capabilities. The government's Digital India initiative continues to support this growth trajectory.",
-      source: { name: "Tech India" },
+      title: "World Technology Leaders Gather for Innovation Summit",
+      description: "Global tech leaders are meeting to discuss the future of AI and digital transformation across industries.",
+      content: "Technology leaders from around the world are gathering for a major innovation summit focused on artificial intelligence and digital transformation. The event highlights breakthrough technologies and their impact on various sectors.",
+      source: { name: "Tech World" },
       author: "Business Desk",
       url: "#",
       urlToImage: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80",
@@ -144,22 +98,22 @@ function generateFallbackNews() {
       category: "technology"
     },
     {
-      title: "New Infrastructure Projects Announced Across Major Cities",
-      description: "Government unveils ambitious infrastructure development plans focusing on metro connectivity and smart city initiatives.",
-      content: "The Ministry of Urban Development has announced a series of new infrastructure projects aimed at improving connectivity and urban living standards. These projects include metro expansions, smart traffic management systems, and green energy initiatives.",
-      source: { name: "India Today" },
-      author: "Infrastructure Desk",
+      title: "Global Markets Show Strong Performance",
+      description: "International stock markets demonstrate resilience with positive gains across major indices worldwide.",
+      content: "Global financial markets are showing strong performance with major indices posting gains. Investors are optimistic about economic recovery and growth prospects in key markets.",
+      source: { name: "Global Finance" },
+      author: "Market Reporter",
       url: "#",
       urlToImage: "https://images.unsplash.com/photo-1464938050520-ef2270bb8ce8?w=800&q=80",
       publishedAt: now,
       category: "business"
     },
     {
-      title: "Indian Cricket Team Prepares for International Series",
-      description: "The national cricket team is gearing up for the upcoming international tournament with intensive training sessions.",
-      content: "The Indian cricket team has intensified its preparation for the upcoming international series. The coaching staff has implemented new training regimens focusing on fitness and strategic gameplay.",
-      source: { name: "Sports India" },
-      author: "Sports Reporter",
+      title: "International Sports Championships Draw Global Attention",
+      description: "Major sporting events are captivating audiences worldwide with thrilling competitions and record-breaking performances.",
+      content: "The world's top athletes are competing in international championships, delivering exceptional performances and breaking records across various sports.",
+      source: { name: "World Sports" },
+      author: "Sports Correspondent",
       url: "#",
       urlToImage: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=800&q=80",
       publishedAt: now,
